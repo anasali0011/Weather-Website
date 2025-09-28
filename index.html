@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        .weather-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .forecast-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl md:text-6xl font-bold text-white mb-2">☀️ Weather App</h1>
+            <p class="text-white/80 text-lg">Get current weather and 5-day forecast</p>
+        </div>
+
+        <!-- Search Bar Component -->
+        <div class="max-w-md mx-auto mb-8">
+            <div class="relative">
+                <input 
+                    type="text" 
+                    id="cityInput"
+                    placeholder="Enter city name..."
+                    class="w-full px-4 py-3 pr-12 rounded-full border-0 shadow-lg focus:outline-none focus:ring-4 focus:ring-white/30 text-gray-700 text-lg"
+                >
+                <button 
+                    id="searchBtn"
+                    class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full transition-colors duration-200"
+                >
+                    🔍
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden text-center mb-8">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-white text-lg">Fetching weather data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden max-w-md mx-auto mb-8 bg-red-500/90 text-white p-4 rounded-lg text-center">
+            <p class="font-semibold">City not found!</p>
+            <p class="text-sm mt-1">Please check the spelling and try again.</p>
+        </div>
+
+        <!-- Current Weather Display -->
+        <div id="currentWeather" class="hidden max-w-2xl mx-auto mb-8">
+            <div class="weather-card rounded-2xl p-8 text-white shadow-2xl fade-in">
+                <div class="text-center">
+                    <h2 id="cityName" class="text-3xl font-bold mb-2"></h2>
+                    <p id="currentDate" class="text-white/80 mb-6"></p>
+                    
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="text-6xl mr-4" id="weatherIcon">☀️</div>
+                        <div>
+                            <div id="temperature" class="text-5xl font-bold"></div>
+                            <div id="weatherCondition" class="text-xl text-white/90"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 mt-6">
+                        <div class="bg-white/20 rounded-lg p-4">
+                            <div class="text-white/80 text-sm">Humidity</div>
+                            <div id="humidity" class="text-2xl font-bold"></div>
+                        </div>
+                        <div class="bg-white/20 rounded-lg p-4">
+                            <div class="text-white/80 text-sm">Feels Like</div>
+                            <div id="feelsLike" class="text-2xl font-bold"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5-Day Forecast -->
+        <div id="forecast" class="hidden max-w-6xl mx-auto">
+            <h3 class="text-2xl font-bold text-white text-center mb-6">5-Day Forecast</h3>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4" id="forecastContainer">
+                <!-- Forecast cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Last Searched City -->
+        <div id="lastSearched" class="hidden max-w-md mx-auto mt-8 text-center">
+            <p class="text-white/80 mb-2">Last searched:</p>
+            <button id="lastSearchedBtn" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-full transition-colors duration-200"></button>
+        </div>
+    </div>
+
+    <script>
+        // State Management
+        class WeatherState {
+            constructor() {
+                this.currentWeather = null;
+                this.forecast = null;
+                this.loading = false;
+                this.error = null;
+                this.lastSearchedCity = localStorage.getItem('lastSearchedCity') || null;
+            }
+            
+            setLoading(loading) {
+                this.loading = loading;
+                this.updateUI();
+            }
+            
+            setError(error) {
+                this.error = error;
+                this.loading = false;
+                this.updateUI();
+            }
+            
+            setWeatherData(current, forecast) {
+                this.currentWeather = current;
+                this.forecast = forecast;
+                this.loading = false;
+                this.error = null;
+                this.updateUI();
+            }
+            
+            setLastSearchedCity(city) {
+                this.lastSearchedCity = city;
+                localStorage.setItem('lastSearchedCity', city);
+                this.updateUI();
+            }
+            
+            updateUI() {
+                this.renderLoading();
+                this.renderError();
+                this.renderCurrentWeather();
+                this.renderForecast();
+                this.renderLastSearched();
+            }
+            
+            renderLoading() {
+                const loadingEl = document.getElementById('loadingIndicator');
+                loadingEl.classList.toggle('hidden', !this.loading);
+            }
+            
+            renderError() {
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.classList.toggle('hidden', !this.error);
+            }
+            
+            renderCurrentWeather() {
+                const weatherEl = document.getElementById('currentWeather');
+                if (!this.currentWeather) {
+                    weatherEl.classList.add('hidden');
+                    return;
+                }
+                
+                weatherEl.classList.remove('hidden');
+                
+                document.getElementById('cityName').textContent = this.currentWeather.name;
+                document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                document.getElementById('temperature').textContent = `${Math.round(this.currentWeather.main.temp)}°C`;
+                document.getElementById('weatherCondition').textContent = this.currentWeather.weather[0].description;
+                document.getElementById('humidity').textContent = `${this.currentWeather.main.humidity}%`;
+                document.getElementById('feelsLike').textContent = `${Math.round(this.currentWeather.main.feels_like)}°C`;
+                
+                // Set weather icon
+                const iconCode = this.currentWeather.weather[0].main.toLowerCase();
+                const iconMap = {
+                    'clear': '☀️',
+                    'clouds': '☁️',
+                    'rain': '🌧️',
+                    'drizzle': '🌦️',
+                    'thunderstorm': '⛈️',
+                    'snow': '❄️',
+                    'mist': '🌫️',
+                    'fog': '🌫️'
+                };
+                document.getElementById('weatherIcon').textContent = iconMap[iconCode] || '🌤️';
+            }
+            
+            renderForecast() {
+                const forecastEl = document.getElementById('forecast');
+                const containerEl = document.getElementById('forecastContainer');
+                
+                if (!this.forecast) {
+                    forecastEl.classList.add('hidden');
+                    return;
+                }
+                
+                forecastEl.classList.remove('hidden');
+                containerEl.innerHTML = '';
+                
+                // Get daily forecasts (every 8th item for daily data)
+                const dailyForecasts = this.forecast.list.filter((_, index) => index % 8 === 0).slice(0, 5);
+                
+                dailyForecasts.forEach(day => {
+                    const date = new Date(day.dt * 1000);
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                    
+                    const iconCode = day.weather[0].main.toLowerCase();
+                    const iconMap = {
+                        'clear': '☀️',
+                        'clouds': '☁️',
+                        'rain': '🌧️',
+                        'drizzle': '🌦️',
+                        'thunderstorm': '⛈️',
+                        'snow': '❄️',
+                        'mist': '🌫️',
+                        'fog': '🌫️'
+                    };
+                    const icon = iconMap[iconCode] || '🌤️';
+                    
+                    const card = document.createElement('div');
+                    card.className = 'forecast-card rounded-xl p-4 text-white text-center fade-in';
+                    card.innerHTML = `
+                        <div class="font-semibold mb-2">${dayName}</div>
+                        <div class="text-3xl mb-2">${icon}</div>
+                        <div class="font-bold text-lg">${Math.round(day.main.temp)}°C</div>
+                        <div class="text-sm text-white/80">${day.weather[0].description}</div>
+                    `;
+                    containerEl.appendChild(card);
+                });
+            }
+            
+            renderLastSearched() {
+                const lastSearchedEl = document.getElementById('lastSearched');
+                const btnEl = document.getElementById('lastSearchedBtn');
+                
+                if (!this.lastSearchedCity) {
+                    lastSearchedEl.classList.add('hidden');
+                    return;
+                }
+                
+                lastSearchedEl.classList.remove('hidden');
+                btnEl.textContent = this.lastSearchedCity;
+            }
+        }
+
+        // Weather API Service
+        class WeatherService {
+            constructor() {
+                this.apiKey = 'demo_key'; // In a real app, this would be a valid API key
+                this.baseUrl = 'https://api.openweathermap.org/data/2.5';
+            }
+            
+            async getCurrentWeather(city) {
+                // Demo data for demonstration purposes
+                return this.getDemoCurrentWeather(city);
+            }
+            
+            async getForecast(city) {
+                // Demo data for demonstration purposes
+                return this.getDemoForecast(city);
+            }
+            
+            // Demo data since we can't use real API keys in this environment
+            getDemoCurrentWeather(city) {
+                return new Promise((resolve, reject) => {
+                    setTimeout(() => {
+                        if (city.toLowerCase() === 'invalid') {
+                            reject(new Error('City not found'));
+                            return;
+                        }
+                        
+                        const demoData = {
+                            name: city,
+                            main: {
+                                temp: Math.floor(Math.random() * 30) + 5,
+                                feels_like: Math.floor(Math.random() * 30) + 5,
+                                humidity: Math.floor(Math.random() * 40) + 40
+                            },
+                            weather: [{
+                                main: ['Clear', 'Clouds', 'Rain', 'Snow'][Math.floor(Math.random() * 4)],
+                                description: 'partly cloudy'
+                            }]
+                        };
+                        resolve(demoData);
+                    }, 1000);
+                });
+            }
+            
+            getDemoForecast(city) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const list = [];
+                        for (let i = 0; i < 40; i++) {
+                            list.push({
+                                dt: Date.now() / 1000 + (i * 3 * 3600),
+                                main: {
+                                    temp: Math.floor(Math.random() * 25) + 10
+                                },
+                                weather: [{
+                                    main: ['Clear', 'Clouds', 'Rain', 'Snow'][Math.floor(Math.random() * 4)],
+                                    description: 'sample weather'
+                                }]
+                            });
+                        }
+                        resolve({ list });
+                    }, 1200);
+                });
+            }
+        }
+
+        // Initialize app
+        const weatherState = new WeatherState();
+        const weatherService = new WeatherService();
+
+        // Search functionality
+        async function searchWeather(city) {
+            if (!city.trim()) return;
+            
+            weatherState.setLoading(true);
+            
+            try {
+                const [currentWeather, forecast] = await Promise.all([
+                    weatherService.getCurrentWeather(city),
+                    weatherService.getForecast(city)
+                ]);
+                
+                weatherState.setWeatherData(currentWeather, forecast);
+                weatherState.setLastSearchedCity(city);
+            } catch (error) {
+                weatherState.setError(error.message);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const city = document.getElementById('cityInput').value;
+            searchWeather(city);
+        });
+
+        document.getElementById('cityInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const city = document.getElementById('cityInput').value;
+                searchWeather(city);
+            }
+        });
+
+        document.getElementById('lastSearchedBtn').addEventListener('click', () => {
+            if (weatherState.lastSearchedCity) {
+                document.getElementById('cityInput').value = weatherState.lastSearchedCity;
+                searchWeather(weatherState.lastSearchedCity);
+            }
+        });
+
+        // Initialize UI
+        weatherState.updateUI();
+
+        // Load last searched city on startup
+        if (weatherState.lastSearchedCity) {
+            document.getElementById('cityInput').value = weatherState.lastSearchedCity;
+            searchWeather(weatherState.lastSearchedCity);
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9863a0f974e75953',t:'MTc1OTA2NjU3Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
